@@ -243,61 +243,111 @@ const InterviewAssistant = () => {
   }, [isInterviewStarted, hasCleanedUp]);
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      <div className="container mx-auto px-4 py-8">
+    <div className="bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+      <div className="container mx-auto px-6 py-8 max-w-7xl"> {/* Increased max width and padding */}
         {/* Header Section */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">AI Interview Assistant</h1>
-          <p className="text-gray-600">Your personal interview practice companion</p>
+        <div className="text-center mb-10"> {/* Reduced margin */}
+          <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight"> {/* Reduced text size */}
+            AI Interview Assistant
+          </h1>
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto"> {/* Adjusted text size and max width */}
+            Your personal AI-powered interview practice companion. Get real-time feedback and improve your communication skills.
+          </p>
         </div>
 
         {/* Main Content */}
-        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
-          {/* Controls */}
-          <div className="space-y-4">
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={startInterview}
-                disabled={isInterviewStarted}
-                className={`px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 flex items-center gap-2 ${
-                  isInterviewStarted ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+        <div className="max-w-4xl mx-auto"> {/* Increased max width */}
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8"> {/* Adjusted padding */}
+            {/* Controls */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  onClick={startInterview}
+                  disabled={isInterviewStarted}
+                  className={`px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg
+                    hover:from-indigo-700 hover:to-indigo-800 transition-all duration-200
+                    flex items-center justify-center gap-2 text-base font-medium ${
+                      isInterviewStarted ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                  Start Interview
+                </button>
+                <button
+                  onClick={stopInterview}
+                  disabled={!isInterviewStarted}
+                  className={`px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg
+                    hover:from-red-600 hover:to-red-700 transition-all duration-200
+                    flex items-center justify-center gap-2 text-base font-medium ${
+                      !isInterviewStarted ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                  </svg>
+                  End Interview
+                </button>
+              </div>
+
+              {/* Status Display */}
+              <div className={`mt-4 p-4 rounded-lg text-center text-base transition-all duration-300
+                ${isInterviewStarted
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                  : 'bg-gray-50 text-gray-700 border border-gray-100'}
+                min-h-[50px] flex items-center justify-center`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
-                Start Interview
-              </button>
-              <button
-                onClick={stopInterview}
-                disabled={!isInterviewStarted}
-                className={`px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 flex items-center gap-2 ${
-                  !isInterviewStarted ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-                </svg>
-                End Interview
-              </button>
+                {status}
+              </div>
             </div>
 
-            {/* Status Display */}
-            <div className="mt-4 p-4 rounded-lg bg-gray-100 text-center text-gray-700 min-h-[50px] flex items-center justify-center">
-              {status}
+            {/* Interview Instructions */}
+            <div className="mt-8 border-t border-gray-100 pt-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">How it works</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                      1
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800">Start Interview</h3>
+                      <p className="text-gray-600">Click the button to begin your session</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                      2
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800">Speak Clearly</h3>
+                      <p className="text-gray-600">Use your microphone to respond</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                      3
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800">Get Feedback</h3>
+                      <p className="text-gray-600">Say 'EVALUATE' to receive analysis</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                      4
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800">End Session</h3>
+                      <p className="text-gray-600">Click 'End Interview' when finished</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Interview Instructions */}
-          <div className="mt-8 border-t pt-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">How it works:</h2>
-            <ul className="list-disc list-inside space-y-2 text-gray-600">
-              <li>Click "Start Interview" to begin</li>
-              <li>Speak clearly into your microphone</li>
-              <li>The AI interviewer will ask you questions</li>
-              <li>Respond naturally as you would in a real interview</li>
-              <li>Click "End Interview" when you're finished</li>
-            </ul>
           </div>
         </div>
       </div>
