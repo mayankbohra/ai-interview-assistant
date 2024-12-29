@@ -84,7 +84,8 @@ const InterviewAssistant = () => {
 
       // Initialize WebSocket with timeout
       const connectWebSocket = async () => {
-        const ws = new WebSocket('ws://localhost:8000/ws/' + Date.now());
+        const wsUrl = `${import.meta.env.VITE_WS_URL}/ws/${Date.now()}`;
+        const ws = new WebSocket(wsUrl);
 
         return new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
