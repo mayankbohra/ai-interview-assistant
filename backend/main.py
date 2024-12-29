@@ -199,39 +199,69 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         async def receive_from_gemini():
             try:
                 while True:
-                    if websocket.client_state.value == 3:  # WebSocket.CLOSED
-                        print("WebSocket closed, stopping Gemini receiver")
-                        return
-
-                    msg = await gemini.receive()
-                    response = json.loads(msg)
-                    # print("Received response from Gemini")
-
-                    # Forward audio data to client
-                    parts = response["serverContent"]["modelTurn"]["parts"]
-                    for p in parts:
-                        # Check connection state before each send
-                        if websocket.client_state.value == 3:
+                    try:
+                        # Check if connection is closed
+                        if websocket.client_state.value == 3:  # WebSocket.CLOSED
+                            print("WebSocket closed, stopping Gemini receiver")
                             return
 
-                        if "inlineData" in p:
-                            # print("Sending audio response to client")
-                            await websocket.send_json({
-                                "type": "audio",
-                                "data": p["inlineData"]["data"]
-                            })
-                        elif "text" in p:
-                            print(f"Sending text response: {p['text']}")
-                            await websocket.send_json({
-                                "type": "text",
-                                "data": p["text"]
-                            })
+                        msg = await gemini.receive()
 
-                    if response["serverContent"].get("turnComplete", False):
-                        gemini.last_turn_complete = True
-                        print("Turn complete")
+                        try:
+                            response = json.loads(msg)
+                        except json.JSONDecodeError as e:
+                            print(f"JSON decode error in Gemini response: {e}")
+                            continue
+
+                        # Forward audio data to client
+                        try:
+                            if "serverContent" not in response or "modelTurn" not in response["serverContent"]:
+                                # print("Invalid response format from Gemini")
+                                continue
+
+                            parts = response["serverContent"]["modelTurn"]["parts"]
+                            for p in parts:
+                                # Check connection state before each send
+                                if websocket.client_state.value == 3:
+                                    return
+
+                                try:
+                                    if "inlineData" in p:
+                                        await websocket.send_json({
+                                            "type": "audio",
+                                            "data": p["inlineData"]["data"]
+                                        })
+                                    elif "text" in p:
+                                        print(f"Sending text response: {p['text']}")
+                                        await websocket.send_json({
+                                            "type": "text",
+                                            "data": p["text"]}
+                                        )
+                                except Exception as e:
+                                    print(f"Error sending response part to client: {e}")
+                                    continue
+
+                            # Handle turn completion
+                            if response["serverContent"].get("turnComplete", False):
+                                gemini.last_turn_complete = True
+                                print("Turn complete")
+
+                        except KeyError as e:
+                            print(f"Key error in Gemini response: {e}")
+                            continue
+                        except Exception as e:
+                            print(f"Error processing Gemini response: {e}")
+                            continue
+
+                    except Exception as e:
+                        print(f"Error in Gemini communication: {e}")
+                        if "connection closed" in str(e).lower():
+                            return
+                        continue
+
             except Exception as e:
-                print(f"Error receiving from Gemini: {e}")
+                print(f"Fatal error in receive_from_gemini: {str(e)}")
+                return
 
         # Create and start both tasks
         client_task = asyncio.create_task(receive_from_client())

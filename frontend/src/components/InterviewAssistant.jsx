@@ -4,6 +4,7 @@ import { base64ToFloat32Array, float32ToPcm16 } from '../lib/utils';
 const InterviewAssistant = () => {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [status, setStatus] = useState('Ready to start interview');
+  const [hasCleanedUp, setHasCleanedUp] = useState(false);
 
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -76,13 +77,14 @@ const InterviewAssistant = () => {
 
   const startInterview = async () => {
     try {
+      setHasCleanedUp(false);
       // Reset audio queue and playing state
       audioQueueRef.current = [];
       isPlayingRef.current = false;
 
       // Initialize WebSocket with timeout
       const connectWebSocket = async () => {
-        const ws = new WebSocket(process.env.REACT_APP_WEBSOCKET_URL + '/ws/' + Date.now());
+        const ws = new WebSocket('ws://localhost:8000/ws/' + Date.now());
 
         return new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
@@ -138,16 +140,20 @@ const InterviewAssistant = () => {
         }
       });
 
-      // Create audio source from microphone stream
+      // Create audio input pipeline
       const microphoneSource = audioContextRef.current.createMediaStreamSource(streamRef.current);
-      const scriptProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      const analyser = audioContextRef.current.createAnalyser();
+      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
 
-      // Process audio data in real-time
-      scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+      // Connect audio nodes
+      microphoneSource.connect(analyser);
+      analyser.connect(processor);
+      processor.connect(audioContextRef.current.destination);
+
+      // Process audio data
+      processor.onaudioprocess = (e) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-
-          // Convert Float32Array to PCM16
+          const inputData = e.inputBuffer.getChannelData(0);
           const pcm16Data = float32ToPcm16(inputData);
 
           // Convert to base64
@@ -163,22 +169,23 @@ const InterviewAssistant = () => {
         }
       };
 
-      // Connect the audio nodes
-      microphoneSource.connect(scriptProcessor);
-      scriptProcessor.connect(audioContextRef.current.destination);
-
-      // Store script processor reference for cleanup
-      mediaRecorderRef.current = scriptProcessor;
+      // Store references for cleanup
+      mediaRecorderRef.current = processor;
 
       // Handle incoming messages
       wsRef.current.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
-        console.log('Received message type:', message.type);
+        try {
+          const message = JSON.parse(event.data);
+          console.log('Received message type:', message.type);
 
-        if (message.type === 'audio' && message.data) {
-          await playAudio(message.data);
-        } else if (message.type === 'text') {
-          setStatus(`AI: ${message.data}`);
+          if (message.type === 'audio' && message.data) {
+            await playAudio(message.data);
+          } else if (message.type === 'text') {
+            setStatus(`AI: ${message.data}`);
+            console.log('Received text:', message.data);
+          }
+        } catch (error) {
+          console.error('Error handling message:', error);
         }
       };
 
@@ -188,11 +195,14 @@ const InterviewAssistant = () => {
     } catch (error) {
       console.error('Error starting interview:', error);
       setStatus(`Error starting interview: ${error.message}`);
+      // Cleanup on error
       stopInterview();
     }
   };
 
   const stopInterview = () => {
+    if (!isInterviewStarted || hasCleanedUp) return;
+
     // Clear audio queue
     audioQueueRef.current = [];
     isPlayingRef.current = false;
@@ -219,14 +229,17 @@ const InterviewAssistant = () => {
 
     setIsInterviewStarted(false);
     setStatus('Interview completed!');
+    setHasCleanedUp(true);
   };
 
   useEffect(() => {
-    // Cleanup on component unmount
+    // Only cleanup on unmount if interview was started
     return () => {
-      stopInterview();
+      if (isInterviewStarted && !hasCleanedUp) {
+        stopInterview();
+      }
     };
-  }, []);
+  }, [isInterviewStarted, hasCleanedUp]);
 
   return (
     <div className="bg-gray-50 min-h-screen">
