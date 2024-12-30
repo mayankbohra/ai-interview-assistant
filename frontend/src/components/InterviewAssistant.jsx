@@ -5,7 +5,8 @@ const InterviewAssistant = () => {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [status, setStatus] = useState('Ready to start interview');
   const [hasCleanedUp, setHasCleanedUp] = useState(false);
-
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -52,19 +53,19 @@ const InterviewAssistant = () => {
       gainNode.connect(audioContextRef.current.destination);
 
       source.onended = () => {
-        console.log('Audio playback ended');
+        // console.log('Audio playback ended');
         isPlayingRef.current = false;
-        playNextInQueue(); // Play next audio in queue
+        playNextInQueue();
       };
 
       source.start(0);
-      console.log('Audio playback started', {
-        queueLength: audioQueueRef.current.length
-      });
+    //   console.log('Audio playback started', {
+    //     queueLength: audioQueueRef.current.length
+    //   });
     } catch (error) {
       console.error('Error playing audio:', error);
       isPlayingRef.current = false;
-      playNextInQueue(); // Try next audio in case of error
+      playNextInQueue();
     }
   };
 
@@ -77,12 +78,15 @@ const InterviewAssistant = () => {
 
   const startInterview = async () => {
     try {
+      setIsConnecting(true);
+      setStatus('Connecting to interview assistant...');
       setHasCleanedUp(false);
+
       // Reset audio queue and playing state
       audioQueueRef.current = [];
       isPlayingRef.current = false;
 
-      // Initialize WebSocket with timeout
+      // Initialize WebSocket with timeout and retry logic
       const connectWebSocket = async () => {
         const wsUrl = `${import.meta.env.VITE_WS_URL}/ws/${Date.now()}`;
         const ws = new WebSocket(wsUrl);
@@ -90,8 +94,8 @@ const InterviewAssistant = () => {
         return new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             ws.close();
-            reject(new Error('WebSocket connection timeout'));
-          }, 5000); // 5 second timeout
+            reject(new Error('Connection timeout'));
+          }, 10000); // 10 second timeout
 
           ws.onopen = () => {
             clearTimeout(timeout);
@@ -108,17 +112,18 @@ const InterviewAssistant = () => {
       };
 
       // Try to connect with retries
-      let retries = 3;
+      let retries = 5;
       let ws = null;
 
       while (retries > 0 && !ws) {
         try {
+          setConnectionAttempts(prev => prev + 1);
           ws = await connectWebSocket();
         } catch (error) {
           console.log(`Connection attempt failed. Retries left: ${retries - 1}`);
           retries--;
-          if (retries === 0) throw error;
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+          if (retries === 0) throw new Error('Failed to connect. Please try again.');
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
@@ -143,12 +148,10 @@ const InterviewAssistant = () => {
 
       // Create audio input pipeline
       const microphoneSource = audioContextRef.current.createMediaStreamSource(streamRef.current);
-      const analyser = audioContextRef.current.createAnalyser();
       const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
 
       // Connect audio nodes
-      microphoneSource.connect(analyser);
-      analyser.connect(processor);
+      microphoneSource.connect(processor);
       processor.connect(audioContextRef.current.destination);
 
       // Process audio data
@@ -177,13 +180,13 @@ const InterviewAssistant = () => {
       wsRef.current.onmessage = async (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log('Received message type:', message.type);
+        //   console.log('Received message type:', message.type);
 
           if (message.type === 'audio' && message.data) {
             await playAudio(message.data);
           } else if (message.type === 'text') {
             setStatus(`AI: ${message.data}`);
-            console.log('Received text:', message.data);
+            // console.log('Received text:', message.data);
           }
         } catch (error) {
           console.error('Error handling message:', error);
@@ -192,11 +195,12 @@ const InterviewAssistant = () => {
 
       setIsInterviewStarted(true);
       setStatus('Interview in progress...');
+      setIsConnecting(false);
 
     } catch (error) {
       console.error('Error starting interview:', error);
-      setStatus(`Error starting interview: ${error.message}`);
-      // Cleanup on error
+      setStatus(`Error: ${error.message}`);
+      setIsConnecting(false);
       stopInterview();
     }
   };
@@ -244,36 +248,47 @@ const InterviewAssistant = () => {
 
   return (
     <div className="bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
-      <div className="container mx-auto px-6 py-8 max-w-7xl"> {/* Increased max width and padding */}
+      <div className="container mx-auto px-6 py-8 max-w-7xl">
         {/* Header Section */}
-        <div className="text-center mb-10"> {/* Reduced margin */}
-          <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight"> {/* Reduced text size */}
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">
             AI Interview Assistant
           </h1>
-          <p className="text-lg text-gray-600 max-w-3xl mx-auto"> {/* Adjusted text size and max width */}
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
             Your personal AI-powered interview practice companion. Get real-time feedback and improve your communication skills.
           </p>
         </div>
 
         {/* Main Content */}
-        <div className="max-w-4xl mx-auto"> {/* Increased max width */}
-          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8"> {/* Adjusted padding */}
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
             {/* Controls */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={startInterview}
-                  disabled={isInterviewStarted}
+                  disabled={isInterviewStarted || isConnecting}
                   className={`px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg
                     hover:from-indigo-700 hover:to-indigo-800 transition-all duration-200
-                    flex items-center justify-center gap-2 text-base font-medium ${
-                      isInterviewStarted ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    flex items-center justify-center gap-2 text-base font-medium min-w-[180px]
+                    ${(isInterviewStarted || isConnecting) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                  Start Interview
+                  {isConnecting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                      </svg>
+                      Start Interview
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={stopInterview}
@@ -291,14 +306,21 @@ const InterviewAssistant = () => {
                 </button>
               </div>
 
-              {/* Status Display */}
+              {/* Status Display with simplified connecting state */}
               <div className={`mt-4 p-4 rounded-lg text-center text-base transition-all duration-300
-                ${isInterviewStarted
-                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                  : 'bg-gray-50 text-gray-700 border border-gray-100'}
-                min-h-[50px] flex items-center justify-center`}
+                ${isConnecting
+                  ? 'bg-yellow-50 text-yellow-700 border border-yellow-100'
+                  : isInterviewStarted
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                    : 'bg-gray-50 text-gray-700 border border-gray-100'}
+                min-h-[50px] flex flex-col items-center justify-center`}
               >
                 {status}
+                {isConnecting && (
+                  <div className="text-sm text-yellow-600 mt-1">
+                    This might take up to a minute...
+                  </div>
+                )}
               </div>
             </div>
 
