@@ -89,13 +89,15 @@ const InterviewAssistant = () => {
       // Initialize WebSocket with timeout and retry logic
       const connectWebSocket = async () => {
         const wsUrl = `${import.meta.env.VITE_WS_URL}/ws/${Date.now()}`;
+        console.log('Attempting to connect to:', wsUrl);
+
         const ws = new WebSocket(wsUrl);
 
         return new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             ws.close();
             reject(new Error('Connection timeout'));
-          }, 10000); // 10 second timeout
+          }, 50000); // Increased timeout to 50 seconds
 
           ws.onopen = () => {
             clearTimeout(timeout);
@@ -108,22 +110,32 @@ const InterviewAssistant = () => {
             console.error('WebSocket error:', error);
             reject(error);
           };
+
+          ws.onclose = (event) => {
+            clearTimeout(timeout);
+            console.log('WebSocket closed:', event.code, event.reason);
+            reject(new Error('WebSocket closed'));
+          };
         });
       };
 
       // Try to connect with retries
-      let retries = 5;
+      let retries = 10;
       let ws = null;
+      let lastError = null;
 
       while (retries > 0 && !ws) {
         try {
           setConnectionAttempts(prev => prev + 1);
           ws = await connectWebSocket();
         } catch (error) {
-          console.log(`Connection attempt failed. Retries left: ${retries - 1}`);
+          lastError = error;
+          console.log(`Connection attempt failed (${retries} retries left):`, error);
           retries--;
-          if (retries === 0) throw new Error('Failed to connect. Please try again.');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (retries === 0) {
+            throw new Error(`Failed to connect: ${lastError.message}`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 3000)); // Increased delay between retries
         }
       }
 
@@ -199,7 +211,7 @@ const InterviewAssistant = () => {
 
     } catch (error) {
       console.error('Error starting interview:', error);
-      setStatus(`Error: ${error.message}`);
+      setStatus(`Error: ${error.message}. Please check your internet connection and try again.`);
       setIsConnecting(false);
       stopInterview();
     }

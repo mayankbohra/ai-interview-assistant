@@ -16,15 +16,10 @@ ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 PRODUCTION_FRONTEND_URL = os.getenv('PRODUCTION_FRONTEND_URL')
 
-# Configure CORS based on environment
-allowed_origins = [FRONTEND_URL]
-if ENVIRONMENT == 'production' and PRODUCTION_FRONTEND_URL:
-    allowed_origins.append(PRODUCTION_FRONTEND_URL)
-
-# Add CORS middleware
+# Update CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=[FRONTEND_URL, PRODUCTION_FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,20 +134,26 @@ connections: Dict[str, GeminiConnection] = {}
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     print(f"New connection attempt from client: {client_id}")
-    client_task = None
-    gemini_task = None
 
     try:
         await websocket.accept()
         print(f"WebSocket connection accepted for client: {client_id}")
 
         # Create and initialize Gemini connection
-        gemini = GeminiConnection()
-        connections[client_id] = gemini
+        try:
+            gemini = GeminiConnection()
+            connections[client_id] = gemini
+            print(f"Initializing Gemini connection for client {client_id}")
 
-        # Initialize Gemini connection immediately
-        await gemini.connect()
-        print(f"Gemini connection established for client {client_id}")
+            # Initialize Gemini connection immediately
+            response = await gemini.connect()
+            print(f"Gemini connection established for client {client_id}")
+            print(f"Initial Gemini response: {response}")
+
+        except Exception as e:
+            print(f"Error initializing Gemini connection: {str(e)}")
+            await websocket.close(code=1011)
+            return
 
         # Send initial greeting
         initial_prompt = (
