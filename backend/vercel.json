@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "main.py"
+    }
+  ],
+  "env": {
+    "GEMINI_API_KEY": "AIzaSyBr3Wih71bcqeSLO9OiC3cbzcbtt8hd_XM",
+    "ENVIRONMENT": "production",
+    "FRONTEND_URL": "http://localhost:5173",
+    "PRODUCTION_FRONTEND_URL": "https://ai-interview-assistant-zeta.vercel.app"
+  }
+}
