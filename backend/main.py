@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
@@ -6,8 +6,40 @@ import os
 from dotenv import load_dotenv
 from websockets import connect
 from typing import Dict
+from pathlib import Path
+from utils.pdf_extractor import process_documents
 
 load_dotenv()
+
+# First load the metadata files
+def load_context_files():
+    try:
+        metadata_dir = Path(__file__).parent / "test_data" / "extracted_metadata"
+
+        with open(metadata_dir / "job_description_metadata.json", "r") as f:
+            jd_metadata = json.load(f)
+
+        with open(metadata_dir / "resume_metadata.json", "r") as f:
+            resume_metadata = json.load(f)
+
+        return jd_metadata, resume_metadata
+    except Exception as e:
+        print(f"Error loading metadata files: {e}")
+        raise
+
+# Load metadata
+jd_metadata, resume_metadata = load_context_files()
+
+# Load system instruction with context
+with open("system_instruction.txt", "r", encoding="utf-8") as file:
+    base_instruction = file.read()
+
+# Create full system instruction with context
+system_instruction_text = f"""{base_instruction}
+                            Context:
+                                Job Description: {json.dumps(jd_metadata, indent=2)}
+                                Resume: {json.dumps(resume_metadata, indent=2)}
+                            """
 
 app = FastAPI()
 
@@ -25,9 +57,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-with open("system_instruction.txt", "r", encoding="utf-8") as file:
-    system_instruction_text = file.read()
-
 class GeminiConnection:
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY")
@@ -38,13 +67,13 @@ class GeminiConnection:
             f"?key={self.api_key}"
         )
         self.ws = None
-        self.last_turn_complete = True  # Add this line
+        self.last_turn_complete = True
 
     async def connect(self):
-        """Initialize connection to Gemini"""
+        """Initialize connection to Gemini with context"""
         self.ws = await connect(self.uri, additional_headers={"Content-Type": "application/json"})
 
-        # Send initial setup message with configuration
+        # Send initial setup message with configuration and context
         setup_message = {
             "setup": {
                 "model": f"models/{self.model}",
@@ -157,8 +186,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
         # Send initial greeting
         initial_prompt = (
-            "Greet the student, tell them who you are and what are you tasked for and ask for "
-            "the name to start the interview."
+            "Greet the student, tell them who you are and what are you tasked for and "
+            "start the interview by asking relevant Questions from Job Description "
+            "and Resume"
         )
         await gemini.send_text(initial_prompt)
 
@@ -309,6 +339,30 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             await connections[client_id].close()
             del connections[client_id]
         print(f"Connection cleaned up for client {client_id}")
+
+@app.post("/upload")
+async def upload_files(jd: UploadFile = File(...), resume: UploadFile = File(...)):
+    try:
+        # Save uploaded files
+        upload_dir = Path(__file__).parent / "uploads"
+        upload_dir.mkdir(exist_ok=True)
+
+        jd_path = upload_dir / jd.filename
+        resume_path = upload_dir / resume.filename
+
+        with open(jd_path, "wb") as jd_file:
+            jd_file.write(await jd.read())
+
+        with open(resume_path, "wb") as resume_file:
+            resume_file.write(await resume.read())
+
+        # Process documents
+        output_folder = Path(__file__).parent / "test_data" / "extracted_metadata"
+        process_documents(jd_path, resume_path, output_folder)
+
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

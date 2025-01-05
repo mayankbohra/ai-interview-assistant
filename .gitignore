@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .env*
+__pycache__
+uploads
+metrics.json
+test*
+temp*
+cost*
