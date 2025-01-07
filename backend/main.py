@@ -11,36 +11,6 @@ from utils.pdf_extractor import process_documents
 
 load_dotenv()
 
-# First load the metadata files
-def load_context_files():
-    try:
-        metadata_dir = Path(__file__).parent / "test_data" / "extracted_metadata"
-
-        with open(metadata_dir / "job_description_metadata.json", "r") as f:
-            jd_metadata = json.load(f)
-
-        with open(metadata_dir / "resume_metadata.json", "r") as f:
-            resume_metadata = json.load(f)
-
-        return jd_metadata, resume_metadata
-    except Exception as e:
-        print(f"Error loading metadata files: {e}")
-        raise
-
-# Load metadata
-jd_metadata, resume_metadata = load_context_files()
-
-# Load system instruction with context
-with open("system_instruction.txt", "r", encoding="utf-8") as file:
-    base_instruction = file.read()
-
-# Create full system instruction with context
-system_instruction_text = f"""{base_instruction}
-                            Context:
-                                Job Description: {json.dumps(jd_metadata, indent=2)}
-                                Resume: {json.dumps(resume_metadata, indent=2)}
-                            """
-
 app = FastAPI()
 
 # Get environment variables
@@ -58,7 +28,7 @@ app.add_middleware(
 )
 
 class GeminiConnection:
-    def __init__(self):
+    def __init__(self, jd_metadata, resume_metadata):
         self.api_key = os.environ.get("GEMINI_API_KEY")
         self.model = "gemini-2.0-flash-exp"
         self.uri = (
@@ -68,12 +38,23 @@ class GeminiConnection:
         )
         self.ws = None
         self.last_turn_complete = True
+        self.jd_metadata = jd_metadata
+        self.resume_metadata = resume_metadata
+
+        # Load system instruction
+        with open("system_instruction.txt", "r", encoding="utf-8") as file:
+            base_instruction = file.read()
+
+        self.system_instruction_text = f"""{base_instruction}
+                                Context:
+                                    Job Description: {json.dumps(jd_metadata, indent=2)}
+                                    Resume: {json.dumps(resume_metadata, indent=2)}
+                                """
 
     async def connect(self):
         """Initialize connection to Gemini with context"""
         self.ws = await connect(self.uri, additional_headers={"Content-Type": "application/json"})
 
-        # Send initial setup message with configuration and context
         setup_message = {
             "setup": {
                 "model": f"models/{self.model}",
@@ -90,7 +71,7 @@ class GeminiConnection:
                 "system_instruction": {
                     "parts": [
                         {
-                            "text": system_instruction_text
+                            "text": self.system_instruction_text
                         }
                     ]
                 }
@@ -160,6 +141,47 @@ class GeminiConnection:
 # Store active connections
 connections: Dict[str, GeminiConnection] = {}
 
+def load_context_files():
+    """Load metadata from the most recently processed files"""
+    try:
+        metadata_dir = Path(__file__).parent / "output" / "extracted_metadata"
+
+        with open(metadata_dir / "job_description_metadata.json", "r") as f:
+            jd_metadata = json.load(f)
+
+        with open(metadata_dir / "resume_metadata.json", "r") as f:
+            resume_metadata = json.load(f)
+
+        return jd_metadata, resume_metadata
+    except Exception as e:
+        print(f"Error loading metadata files: {e}")
+        return {}, {}
+
+@app.post("/upload")
+async def upload_files(jd: UploadFile = File(...), resume: UploadFile = File(...)):
+    try:
+        # Save uploaded files
+        upload_dir = Path(__file__).parent / "uploads"
+        upload_dir.mkdir(exist_ok=True)
+
+        jd_path = upload_dir / jd.filename
+        resume_path = upload_dir / resume.filename
+
+        with open(jd_path, "wb") as jd_file:
+            jd_file.write(await jd.read())
+
+        with open(resume_path, "wb") as resume_file:
+            resume_file.write(await resume.read())
+
+        # Process documents
+        output_folder = Path(__file__).parent / "output" / "extracted_metadata"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        process_documents(jd_path, resume_path, output_folder)
+
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     print(f"New connection attempt from client: {client_id}")
@@ -168,16 +190,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await websocket.accept()
         print(f"WebSocket connection accepted for client: {client_id}")
 
-        # Create and initialize Gemini connection
+        # Load the latest context files after processing
+        jd_metadata, resume_metadata = load_context_files()
+
+        # Create and initialize Gemini connection with the loaded metadata
         try:
-            gemini = GeminiConnection()
+            gemini = GeminiConnection(jd_metadata, resume_metadata)
             connections[client_id] = gemini
             print(f"Initializing Gemini connection for client {client_id}")
 
-            # Initialize Gemini connection immediately
             response = await gemini.connect()
             print(f"Gemini connection established for client {client_id}")
-            print(f"Initial Gemini response: {response}")
 
         except Exception as e:
             print(f"Error initializing Gemini connection: {str(e)}")
@@ -339,30 +362,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             await connections[client_id].close()
             del connections[client_id]
         print(f"Connection cleaned up for client {client_id}")
-
-@app.post("/upload")
-async def upload_files(jd: UploadFile = File(...), resume: UploadFile = File(...)):
-    try:
-        # Save uploaded files
-        upload_dir = Path(__file__).parent / "uploads"
-        upload_dir.mkdir(exist_ok=True)
-
-        jd_path = upload_dir / jd.filename
-        resume_path = upload_dir / resume.filename
-
-        with open(jd_path, "wb") as jd_file:
-            jd_file.write(await jd.read())
-
-        with open(resume_path, "wb") as resume_file:
-            resume_file.write(await resume.read())
-
-        # Process documents
-        output_folder = Path(__file__).parent / "test_data" / "extracted_metadata"
-        process_documents(jd_path, resume_path, output_folder)
-
-        return {"status": "success"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

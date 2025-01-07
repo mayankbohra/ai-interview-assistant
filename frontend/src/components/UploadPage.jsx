@@ -26,7 +26,7 @@ function UploadPage({ onProceed }) {
     formData.append('resume', resumeFile);
 
     try {
-      setProcessingStage('Uploading files...');
+    //   setProcessingStage('Uploading files...');
       const response = await fetch(`${import.meta.env.VITE_API_URL}/upload`, {
         method: 'POST',
         body: formData,
@@ -167,13 +167,6 @@ function UploadPage({ onProceed }) {
               </div>
             </div>
           </div>
-
-          {/* Show processing status in a more prominent way */}
-          {isProcessing && (
-            <div className="mt-4 p-4 bg-blue-50 text-blue-700 rounded-lg text-center animate-pulse">
-              {processingStage}
-            </div>
-          )}
 
           {/* Show error messages only */}
           {uploadStatus && uploadStatus.includes('Error') && (

@@ -9,7 +9,7 @@ load_dotenv()
 
 # Initialize OpenAI
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-MODEL = "gpt-4-turbo-preview"
+MODEL = "gpt-4o"
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract text content from a PDF file using PyPDF2."""
